@@ -20,7 +20,7 @@ spec:
         app.kubernetes.io/component: postgres
     spec:
       securityContext:
-        {{- toYaml .Values.securityContext.postgres | nindent 8 }}
+        fsGroup: {{ .Values.securityContext.postgres.fsGroup }}
       containers:
         # Add init container to fix volume permissions for local-path provisioner
         - name: init-chmod-data
@@ -38,6 +38,9 @@ spec:
               mountPath: /var/lib/postgresql/data
             {{- end }}
         - name: postgres
+          securityContext:
+            runAsUser: {{ .Values.securityContext.postgres.runAsUser }}
+            runAsGroup: {{ .Values.securityContext.postgres.runAsGroup }}
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
           env:

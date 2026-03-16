@@ -4,7 +4,7 @@
 [![Helm](https://img.shields.io/badge/Helm-v3-blue?logo=helm)](https://helm.sh)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s-326CE5?logo=kubernetes)](https://k3s.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![n8n](https://img.shields.io/badge/n8n-1.4.1-FF6C37?logo=n8n)](https://n8n.io)
+[![n8n](https://img.shields.io/badge/n8n-2.11.4-FF6C37?logo=n8n)](https://n8n.io)
 
 A production-ready n8n Helm chart optimized for K3s with automatic Let's Encrypt SSL support via cert-manager.
 
@@ -58,7 +58,7 @@ postgres:
 
 n8n:
   image:
-    tag: 1.4.1
+    tag: 2.11.4
 ```
 
 ### 4. Install the chart
@@ -75,7 +75,7 @@ helm install my-n8n n8n-helm/ -f my-values.yaml
 |-----------|-------------|---------|
 | `domain` | Your domain name | `example.com` |
 | `letsencrypt.email` | Email for Let's Encrypt | `admin@example.com` |
-| `n8n.image.tag` | n8n image tag | `1.4.1` |
+| `n8n.image.tag` | n8n image tag | `2.11.4` |
 | `postgres.password` | PostgreSQL DB password | `changeme-postgres-password` |
 
 ### Full Configuration Reference
@@ -106,7 +106,7 @@ helm install my-n8n n8n-helm/ -f my-values.yaml
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `n8n.image.repository` | Image repository | `docker.n8n.io/n8nio/n8n` |
-| `n8n.image.tag` | Image tag | `1.4.1` |
+| `n8n.image.tag` | Image tag | `2.11.4` |
 | `n8n.replicas` | Number of replicas | `1` |
 | `n8n.resources.requests.memory` | Memory request | `512Mi` |
 | `n8n.resources.requests.cpu` | CPU request | `250m` |
@@ -177,7 +177,7 @@ helm uninstall my-n8n
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        n8n Deployment                           │
-│                     (n8nio/n8n:1.4.1)                           │
+│                     (n8nio/n8n:2.11.4)                           │
 │                                                                 │
 │  ┌─────────────────┐        ┌─────────────────────────────────┐ │
 │  │     n8n Pod     │───────▶│  PVC: n8n-data (2Gi)            │ │

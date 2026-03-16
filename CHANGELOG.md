@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial release of Awesome K3s n8n Helm chart
-- n8n v1.4.1 support
+- n8n v2.11.4 support
 - PostgreSQL 16 StatefulSet with persistent storage
 - Automatic Let's Encrypt SSL via cert-manager
 - Traefik ingress integration for K3s

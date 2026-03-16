@@ -35,11 +35,11 @@ letsencrypt:
 n8n:
   image:
     repository: docker.n8n.io/n8nio/n8n
-    tag: 1.4.1
+    tag: 2.11.4
     pullPolicy: IfNotPresent
-  
+
   replicas: 1
-  
+
   # Resource limits and requests
   resources:
     requests:
@@ -51,7 +51,7 @@ n8n:
 
   # Timezone for n8n to operate in
   timezone: "Europe/Istanbul"
-  
+
   # Extra environment variables (optional)
   # You can customize any n8n variables here
   extraEnv: []
@@ -64,12 +64,12 @@ postgres:
     repository: postgres
     tag: "16"
     pullPolicy: IfNotPresent
-  
+
   # Database credentials (CHANGE THESE IN PRODUCTION!)
   database: n8n
   user: n8n
   password: "changeme-postgres-password"
-  
+
   # Resource limits and requests
   resources:
     requests:
@@ -85,12 +85,12 @@ postgres:
 persistence:
   # Storage class (local-path is default for k3s)
   storageClass: local-path
-  
+
   n8n:
     enabled: true
     size: 2Gi
     accessMode: ReadWriteOnce
-  
+
   postgres:
     enabled: true
     size: 5Gi
@@ -112,7 +112,7 @@ service:
   n8n:
     type: ClusterIP
     port: 5678
-  
+
   postgres:
     type: ClusterIP
     port: 5432
@@ -125,7 +125,7 @@ securityContext:
     runAsUser: 1000
     runAsGroup: 1000
     fsGroup: 1000
-  
+
   postgres:
     # runAsUser: 999
     # runAsGroup: 999
@@ -141,7 +141,7 @@ healthChecks:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 6
-  
+
   postgres:
     enabled: true
     initialDelaySeconds: 30

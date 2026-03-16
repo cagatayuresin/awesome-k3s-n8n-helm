@@ -3,7 +3,7 @@ name: n8n
 description: A production-ready n8n Helm chart for K3s with Let's Encrypt SSL support
 type: application
 version: 1.0.0
-appVersion: "1.4.1"
+appVersion: "2.11.4"
 keywords:
   - n8n
   - workflow

@@ -1,0 +1,157 @@
+# =============================================================================
+# n8n Helm Chart - Production Configuration
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Namespace Configuration
+# -----------------------------------------------------------------------------
+namespace: n8n
+createNamespace: true
+
+# -----------------------------------------------------------------------------
+# Domain Configuration
+# -----------------------------------------------------------------------------
+domain: example.com
+# Set to true to also handle www.domain
+enableWwwRedirect: true
+
+# -----------------------------------------------------------------------------
+# Let's Encrypt SSL Configuration
+# -----------------------------------------------------------------------------
+letsencrypt:
+  # Email for certificate notifications (required)
+  email: admin@example.com
+  # Use "https://acme-staging-v02.api.letsencrypt.org/directory" for testing
+  # Use "https://acme-v02.api.letsencrypt.org/directory" for production
+  server: https://acme-v02.api.letsencrypt.org/directory
+  # Create ClusterIssuer resource
+  createClusterIssuer: true
+  # ClusterIssuer name (use existing if createClusterIssuer is false)
+  clusterIssuerName: letsencrypt-prod
+
+# -----------------------------------------------------------------------------
+# n8n Configuration
+# -----------------------------------------------------------------------------
+n8n:
+  image:
+    repository: docker.n8n.io/n8nio/n8n
+    tag: 1.4.1
+    pullPolicy: IfNotPresent
+  
+  replicas: 1
+  
+  # Resource limits and requests
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  # Timezone for n8n to operate in
+  timezone: "Europe/Istanbul"
+  
+  # Extra environment variables (optional)
+  # You can customize any n8n variables here
+  extraEnv: []
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Configuration
+# -----------------------------------------------------------------------------
+postgres:
+  image:
+    repository: postgres
+    tag: "16"
+    pullPolicy: IfNotPresent
+  
+  # Database credentials (CHANGE THESE IN PRODUCTION!)
+  database: n8n
+  user: n8n
+  password: "changeme-postgres-password"
+  
+  # Resource limits and requests
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# -----------------------------------------------------------------------------
+# Persistence Configuration
+# -----------------------------------------------------------------------------
+persistence:
+  # Storage class (local-path is default for k3s)
+  storageClass: local-path
+  
+  n8n:
+    enabled: true
+    size: 2Gi
+    accessMode: ReadWriteOnce
+  
+  postgres:
+    enabled: true
+    size: 5Gi
+    accessMode: ReadWriteOnce
+
+# -----------------------------------------------------------------------------
+# Ingress Configuration
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  # Additional annotations can be added here
+
+# -----------------------------------------------------------------------------
+# Service Configuration
+# -----------------------------------------------------------------------------
+service:
+  n8n:
+    type: ClusterIP
+    port: 5678
+  
+  postgres:
+    type: ClusterIP
+    port: 5432
+
+# -----------------------------------------------------------------------------
+# Security Context
+# -----------------------------------------------------------------------------
+securityContext:
+  n8n:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  
+  postgres:
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+
+# -----------------------------------------------------------------------------
+# Health Checks
+# -----------------------------------------------------------------------------
+healthChecks:
+  n8n:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  
+  postgres:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+# -----------------------------------------------------------------------------
+# Node Selector, Tolerations, Affinity
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+tolerations: []
+affinity: {}

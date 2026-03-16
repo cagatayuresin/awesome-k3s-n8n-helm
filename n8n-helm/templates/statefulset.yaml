@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "n8n.fullname" . }}-postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: {{ include "n8n.fullname" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "n8n.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "n8n.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      securityContext:
+        {{- toYaml .Values.securityContext.postgres | nindent 8 }}
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}
+                  key: postgres-password
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          {{- if .Values.healthChecks.postgres.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgres.user | quote }}
+                - -d
+                - {{ .Values.postgres.database | quote }}
+            initialDelaySeconds: {{ .Values.healthChecks.postgres.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.postgres.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.postgres.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.postgres.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgres.user | quote }}
+                - -d
+                - {{ .Values.postgres.database | quote }}
+            initialDelaySeconds: {{ .Values.healthChecks.postgres.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.postgres.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.postgres.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.postgres.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.postgres.enabled }}
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.postgres.enabled }}
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: {{ include "n8n.fullname" . }}-postgres
+        {{- end }}

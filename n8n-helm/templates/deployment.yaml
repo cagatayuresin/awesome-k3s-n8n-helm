@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "n8n.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+    app.kubernetes.io/component: n8n
+spec:
+  replicas: {{ .Values.n8n.replicas }}
+  selector:
+    matchLabels:
+      {{- include "n8n.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: n8n
+  template:
+    metadata:
+      labels:
+        {{- include "n8n.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: n8n
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.securityContext.n8n | nindent 8 }}
+      containers:
+        - name: n8n
+          image: "{{ .Values.n8n.image.repository }}:{{ .Values.n8n.image.tag }}"
+          imagePullPolicy: {{ .Values.n8n.image.pullPolicy }}
+          env:
+            - name: N8N_HOST
+              value: {{ .Values.domain | quote }}
+            - name: N8N_PORT
+              value: "5678"
+            - name: N8N_PROTOCOL
+              value: "https"
+            - name: NODE_ENV
+              value: "production"
+            - name: WEBHOOK_URL
+              value: "https://{{ .Values.domain }}/"
+            - name: GENERIC_TIMEZONE
+              value: {{ .Values.n8n.timezone | quote }}
+            
+            # Database Connection
+            - name: DB_TYPE
+              value: postgresdb
+            - name: DB_POSTGRESDB_HOST
+              value: {{ include "n8n.fullname" . }}-postgres
+            - name: DB_POSTGRESDB_PORT
+              value: "5432"
+            - name: DB_POSTGRESDB_DATABASE
+              value: {{ .Values.postgres.database | quote }}
+            - name: DB_POSTGRESDB_USER
+              value: {{ .Values.postgres.user | quote }}
+            - name: DB_POSTGRESDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}
+                  key: postgres-password
+                  
+            {{- if .Values.n8n.extraEnv }}
+            {{- toYaml .Values.n8n.extraEnv | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 5678
+              protocol: TCP
+          {{- if .Values.healthChecks.n8n.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.healthChecks.n8n.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.n8n.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.n8n.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.n8n.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.healthChecks.n8n.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthChecks.n8n.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthChecks.n8n.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthChecks.n8n.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.n8n.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.n8n.enabled }}
+            - name: n8n-data
+              mountPath: /home/node/.n8n
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.n8n.enabled }}
+        - name: n8n-data
+          persistentVolumeClaim:
+            claimName: {{ include "n8n.fullname" . }}-n8n
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

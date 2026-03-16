@@ -22,6 +22,21 @@ spec:
       securityContext:
         {{- toYaml .Values.securityContext.postgres | nindent 8 }}
       containers:
+        # Add init container to fix volume permissions for local-path provisioner
+        - name: init-chmod-data
+          image: busybox:latest
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 999:999 /var/lib/postgresql/data
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            {{- if .Values.persistence.postgres.enabled }}
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            {{- end }}
         - name: postgres
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}

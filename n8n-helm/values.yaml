@@ -127,8 +127,8 @@ securityContext:
     fsGroup: 1000
   
   postgres:
-    runAsUser: 999
-    runAsGroup: 999
+    # runAsUser: 999
+    # runAsGroup: 999
     fsGroup: 999
 
 # -----------------------------------------------------------------------------

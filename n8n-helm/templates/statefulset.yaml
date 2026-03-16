@@ -38,9 +38,10 @@ spec:
               mountPath: /var/lib/postgresql/data
             {{- end }}
         - name: postgres
-          securityContext:
-            runAsUser: {{ .Values.securityContext.postgres.runAsUser }}
-            runAsGroup: {{ .Values.securityContext.postgres.runAsGroup }}
+          # Remove specific user enforcement so postgres image can handle its own startups
+          # securityContext:
+          #   runAsUser: {{ .Values.securityContext.postgres.runAsUser }}
+          #   runAsGroup: {{ .Values.securityContext.postgres.runAsGroup }}
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
           env:

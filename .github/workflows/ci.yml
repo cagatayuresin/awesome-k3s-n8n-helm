@@ -159,7 +159,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Create Kind cluster
-        uses: helm/kind-action@v1.15.1
+        uses: helm/kind-action@v1.15.2
         with:
           cluster_name: n8n-e2e
           wait: 120s

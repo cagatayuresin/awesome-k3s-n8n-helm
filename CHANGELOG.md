@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated n8n readiness probe to use `/healthz/readiness` (verifies database connectivity & migrations) while keeping `/healthz` for liveness.
 - Replaced mutable `busybox:latest` in PostgreSQL init container with configurable pinned `busybox:1.37` and explicit resource requests/limits.
 - Defaulted n8n Deployment strategy to `Recreate` to avoid ReadWriteOnce PVC lock conflicts on K3s `local-path`.
-- Upgraded GitHub Actions workflows to latest versions (`actions/checkout@v7`, `azure/setup-helm@v4`, Helm `v4.3.2`).
+- Upgraded GitHub Actions workflows to latest versions (`actions/checkout@v7`, `azure/setup-helm@v5`, Helm `v4.3.2`).
 - Removed CI-based SonarQube workflow and `sonar-project.properties` in favor of SonarCloud Automatic Analysis.
 
 ### Added
@@ -33,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nodeSelector`, `affinity`, `tolerations`, `imagePullSecrets`, and `extraEnv` support on PostgreSQL StatefulSet.
 - Professional CI pipeline (`.github/workflows/ci.yml`) with `yamllint`, `helm lint --strict`, `kubeconform` Kubernetes + CRD schema validation, Trivy IaC security scanning, and Kind E2E `helm install` / `helm test` / `helm upgrade` / `helm uninstall`.
 - Automated OCI Helm chart publishing to GitHub Container Registry (`oci://ghcr.io/cagatayuresin/charts/n8n`), build provenance attestation (`actions/attest@v4`), and GitHub Releases via `.github/workflows/release.yml`.
-- Dependabot configuration (`.github/dependabot.yml`) for weekly GitHub Actions updates.
 
 ### Fixed
 

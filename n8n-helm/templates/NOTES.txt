@@ -1,0 +1,32 @@
+{{- $ns := include "n8n.namespace" . -}}
+n8n has been deployed!
+
+1. Application URL:
+{{- if .Values.ingress.enabled }}
+   https://{{ .Values.domain }}
+{{- if .Values.enableWwwRedirect }}
+   https://www.{{ .Values.domain }}
+{{- end }}
+{{- else }}
+   Run port-forward to access n8n locally:
+   kubectl --namespace {{ $ns }} port-forward svc/{{ include "n8n.fullname" . }} 5678:{{ .Values.service.n8n.port }}
+   Then open: http://localhost:5678
+{{- end }}
+
+2. Check deployment status:
+   kubectl get pods,pvc,svc -n {{ $ns }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{- if .Values.ingress.enabled }}
+3. Check TLS certificate status:
+   kubectl get certificate,ingress -n {{ $ns }}
+{{- end }}
+
+{{- if eq .Values.postgres.password "changeme-postgres-password" }}
+
+WARNING: You are using the default PostgreSQL password!
+Please set a strong `postgres.password` before exposing this instance to production.
+{{- end }}
+{{- if not .Values.n8n.encryptionKey }}
+
+TIP: Consider setting `n8n.encryptionKey` in your values file so credentials stay decryptable across PVC/pod migrations.
+{{- end }}

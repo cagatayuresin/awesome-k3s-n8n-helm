@@ -1,0 +1,147 @@
+name: Release Helm Chart to GHCR
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'n8n-helm/**'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Package and verify without pushing to GHCR or creating a GitHub Release'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  HELM_VERSION: v4.3.2
+  CHART_DIR: n8n-helm
+
+jobs:
+  release:
+    name: Package & Publish OCI Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Extract chart metadata
+        id: meta
+        run: |
+          CHART_NAME=$(yq '.name' "${CHART_DIR}/Chart.yaml")
+          CHART_VERSION=$(yq '.version' "${CHART_DIR}/Chart.yaml")
+          APP_VERSION=$(yq '.appVersion' "${CHART_DIR}/Chart.yaml")
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          TAG="v${CHART_VERSION}"
+
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            EXISTS="true"
+          else
+            EXISTS="false"
+          fi
+
+          {
+            echo "chart_name=${CHART_NAME}"
+            echo "chart_version=${CHART_VERSION}"
+            echo "app_version=${APP_VERSION}"
+            echo "owner=${OWNER_LOWER}"
+            echo "tag=${TAG}"
+            echo "tag_exists=${EXISTS}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Chart: ${CHART_NAME} v${CHART_VERSION} (appVersion: ${APP_VERSION}), tag ${TAG} exists: ${EXISTS}"
+
+      - name: Skip if version already released
+        if: steps.meta.outputs.tag_exists == 'true' && inputs.dry_run != true
+        run: |
+          echo "Release tag ${{ steps.meta.outputs.tag }} already exists. Bump version in ${CHART_DIR}/Chart.yaml to publish a new release."
+
+      - name: Lint & package chart
+        if: steps.meta.outputs.tag_exists == 'false' || inputs.dry_run == true
+        run: |
+          helm lint "${CHART_DIR}" --strict
+          mkdir -p .dist
+          helm package "${CHART_DIR}" --destination .dist
+          PKG_FILE="${{ steps.meta.outputs.chart_name }}-${{ steps.meta.outputs.chart_version }}.tgz"
+          (cd .dist && sha256sum "${PKG_FILE}" > "${PKG_FILE}.sha256")
+          ls -la .dist
+
+      - name: Login to GitHub Container Registry (GHCR)
+        if: steps.meta.outputs.tag_exists == 'false' && inputs.dry_run != true
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push Helm chart to GHCR (OCI)
+        if: steps.meta.outputs.tag_exists == 'false' && inputs.dry_run != true
+        run: |
+          helm push ".dist/${{ steps.meta.outputs.chart_name }}-${{ steps.meta.outputs.chart_version }}.tgz" \
+            "oci://ghcr.io/${{ steps.meta.outputs.owner }}/charts"
+
+      - name: Attest build provenance
+        if: steps.meta.outputs.tag_exists == 'false' && inputs.dry_run != true
+        uses: actions/attest@v4
+        with:
+          subject-path: '.dist/*.tgz'
+
+      - name: Create GitHub Release
+        if: steps.meta.outputs.tag_exists == 'false' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHART_NAME="${{ steps.meta.outputs.chart_name }}"
+          CHART_VERSION="${{ steps.meta.outputs.chart_version }}"
+          APP_VERSION="${{ steps.meta.outputs.app_version }}"
+          OWNER="${{ steps.meta.outputs.owner }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+
+          cat <<EOF > .dist/release-notes.md
+          ### Install via GitHub Container Registry (OCI)
+
+          \`\`\`bash
+          helm install my-n8n oci://ghcr.io/${OWNER}/charts/${CHART_NAME} \\
+            --version ${CHART_VERSION} \\
+            -f my-values.yaml
+          \`\`\`
+
+          ### Upgrade
+
+          \`\`\`bash
+          helm upgrade my-n8n oci://ghcr.io/${OWNER}/charts/${CHART_NAME} \\
+            --version ${CHART_VERSION} \\
+            -f my-values.yaml
+          \`\`\`
+          EOF
+
+          RELEASE_ARGS=(
+            "${TAG}"
+            ".dist/${CHART_NAME}-${CHART_VERSION}.tgz"
+            ".dist/${CHART_NAME}-${CHART_VERSION}.tgz.sha256"
+            --title "Helm Chart ${TAG} (n8n ${APP_VERSION})"
+            --notes-file .dist/release-notes.md
+            --generate-notes
+          )
+          if [ -n "${PREV_TAG}" ]; then
+            RELEASE_ARGS+=(--notes-start-tag "${PREV_TAG}")
+          fi
+
+          gh release create "${RELEASE_ARGS[@]}"

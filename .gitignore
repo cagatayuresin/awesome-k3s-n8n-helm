@@ -18,3 +18,5 @@ Thumbs.db
 
 # Helm
 *.tgz
+.dist/
+rendered/

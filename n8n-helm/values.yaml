@@ -30,15 +30,30 @@ letsencrypt:
   clusterIssuerName: letsencrypt-prod
 
 # -----------------------------------------------------------------------------
+# Image Pull Secrets
+# -----------------------------------------------------------------------------
+imagePullSecrets: []
+
+# -----------------------------------------------------------------------------
 # n8n Configuration
 # -----------------------------------------------------------------------------
 n8n:
   image:
     repository: docker.n8n.io/n8nio/n8n
-    tag: 2.11.4
+    tag: "2.49.5"
     pullPolicy: IfNotPresent
 
   replicas: 1
+
+  # Deployment strategy: Recreate is recommended with ReadWriteOnce (local-path) PVCs
+  strategy: Recreate
+
+  # Optional encryption key for n8n credentials (RECOMMENDED in production!)
+  # Keep this secret and persistent across redeployments; losing it breaks saved credentials.
+  encryptionKey: ""
+
+  # Number of reverse proxies in front of n8n (1 for K3s Traefik)
+  proxyHops: 1
 
   # Resource limits and requests
   resources:
@@ -62,7 +77,13 @@ n8n:
 postgres:
   image:
     repository: postgres
-    tag: "16"
+    tag: "18"
+    pullPolicy: IfNotPresent
+
+  # Init container image used to set PVC ownership for K3s local-path provisioner
+  initImage:
+    repository: busybox
+    tag: "1.37"
     pullPolicy: IfNotPresent
 
   # Database credentials (CHANGE THESE IN PRODUCTION!)
@@ -78,6 +99,9 @@ postgres:
     limits:
       memory: "512Mi"
       cpu: "500m"
+
+  # Extra environment variables for PostgreSQL (optional)
+  extraEnv: []
 
 # -----------------------------------------------------------------------------
 # Persistence Configuration
@@ -122,13 +146,13 @@ service:
 # -----------------------------------------------------------------------------
 securityContext:
   n8n:
+    runAsNonRoot: true
     runAsUser: 1000
     runAsGroup: 1000
     fsGroup: 1000
 
   postgres:
-    # runAsUser: 999
-    # runAsGroup: 999
+    # Postgres official entrypoint starts as root to fix permissions and drops to UID 999
     fsGroup: 999
 
 # -----------------------------------------------------------------------------
@@ -137,6 +161,8 @@ securityContext:
 healthChecks:
   n8n:
     enabled: true
+    livenessPath: /healthz
+    readinessPath: /healthz/readiness
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "n8n.fullname" . }}-test-connection"
+  namespace: {{ include "n8n.namespace" . }}
+  labels:
+    {{- include "n8n.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+  containers:
+    - name: healthcheck
+      image: "{{ .Values.postgres.initImage.repository }}:{{ .Values.postgres.initImage.tag }}"
+      imagePullPolicy: {{ .Values.postgres.initImage.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      command:
+        - sh
+        - -c
+        - |
+          wget -qO- "http://{{ include "n8n.fullname" . }}:{{ .Values.service.n8n.port }}{{ .Values.healthChecks.n8n.readinessPath | default "/healthz/readiness" }}"
+      resources:
+        requests:
+          memory: "16Mi"
+          cpu: "25m"
+        limits:
+          memory: "32Mi"
+          cpu: "50m"

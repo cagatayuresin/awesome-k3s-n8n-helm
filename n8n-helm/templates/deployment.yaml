@@ -2,18 +2,22 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "n8n.fullname" . }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "n8n.namespace" . }}
   labels:
     {{- include "n8n.labels" . | nindent 4 }}
     app.kubernetes.io/component: n8n
 spec:
   replicas: {{ .Values.n8n.replicas }}
+  strategy:
+    type: {{ .Values.n8n.strategy | default "Recreate" }}
   selector:
     matchLabels:
       {{- include "n8n.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: n8n
   template:
     metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
       labels:
         {{- include "n8n.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: n8n
@@ -26,8 +30,13 @@ spec:
         {{- toYaml .Values.securityContext.n8n | nindent 8 }}
       containers:
         - name: n8n
-          image: "{{ .Values.n8n.image.repository }}:{{ .Values.n8n.image.tag }}"
+          image: "{{ .Values.n8n.image.repository }}:{{ .Values.n8n.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.n8n.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: N8N_HOST
               value: {{ .Values.domain | quote }}
@@ -41,14 +50,22 @@ spec:
               value: "https://{{ .Values.domain }}/"
             - name: GENERIC_TIMEZONE
               value: {{ .Values.n8n.timezone | quote }}
-            
+            - name: N8N_PROXY_HOPS
+              value: {{ .Values.n8n.proxyHops | default 1 | quote }}
+            {{- if .Values.n8n.encryptionKey }}
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "n8n.fullname" . }}
+                  key: n8n-encryption-key
+            {{- end }}
             # Database Connection
             - name: DB_TYPE
               value: postgresdb
             - name: DB_POSTGRESDB_HOST
               value: {{ include "n8n.fullname" . }}-postgres
             - name: DB_POSTGRESDB_PORT
-              value: "5432"
+              value: {{ .Values.service.postgres.port | quote }}
             - name: DB_POSTGRESDB_DATABASE
               value: {{ .Values.postgres.database | quote }}
             - name: DB_POSTGRESDB_USER
@@ -58,7 +75,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "n8n.fullname" . }}
                   key: postgres-password
-                  
             {{- if .Values.n8n.extraEnv }}
             {{- toYaml .Values.n8n.extraEnv | nindent 12 }}
             {{- end }}
@@ -69,7 +85,7 @@ spec:
           {{- if .Values.healthChecks.n8n.enabled }}
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: {{ .Values.healthChecks.n8n.livenessPath | default "/healthz" }}
               port: http
             initialDelaySeconds: {{ .Values.healthChecks.n8n.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthChecks.n8n.periodSeconds }}
@@ -77,7 +93,7 @@ spec:
             failureThreshold: {{ .Values.healthChecks.n8n.failureThreshold }}
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: {{ .Values.healthChecks.n8n.readinessPath | default "/healthz/readiness" }}
               port: http
             initialDelaySeconds: {{ .Values.healthChecks.n8n.initialDelaySeconds }}
             periodSeconds: {{ .Values.healthChecks.n8n.periodSeconds }}

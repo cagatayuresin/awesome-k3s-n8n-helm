@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ include "n8n.fullname" . }}-postgres
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "n8n.namespace" . }}
   labels:
     {{- include "n8n.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
@@ -15,36 +15,49 @@ spec:
       app.kubernetes.io/component: postgres
   template:
     metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
       labels:
         {{- include "n8n.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         fsGroup: {{ .Values.securityContext.postgres.fsGroup }}
+      {{- if .Values.persistence.postgres.enabled }}
       initContainers:
-        # Add init container to fix volume permissions for local-path provisioner
+        # Fix volume ownership for K3s local-path provisioner before PostgreSQL initializes
         - name: init-chmod-data
-          image: busybox:latest
+          image: "{{ .Values.postgres.initImage.repository }}:{{ .Values.postgres.initImage.tag }}"
+          imagePullPolicy: {{ .Values.postgres.initImage.pullPolicy }}
           command:
             - sh
             - -c
             - |
-              chown -R 999:999 /var/lib/postgresql/data
+              chown -R 999:999 /var/lib/postgresql
           securityContext:
             runAsUser: 0
+            allowPrivilegeEscalation: false
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
           volumeMounts:
-            {{- if .Values.persistence.postgres.enabled }}
             - name: postgres-data
-              mountPath: /var/lib/postgresql/data
-            {{- end }}
+              mountPath: /var/lib/postgresql
+      {{- end }}
       containers:
         - name: postgres
-          # Remove specific user enforcement so postgres image can handle its own startups
-          # securityContext:
-          #   runAsUser: {{ .Values.securityContext.postgres.runAsUser }}
-          #   runAsGroup: {{ .Values.securityContext.postgres.runAsGroup }}
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
           env:
             - name: POSTGRES_DB
               value: {{ .Values.postgres.database | quote }}
@@ -55,6 +68,9 @@ spec:
                 secretKeyRef:
                   name: {{ include "n8n.fullname" . }}
                   key: postgres-password
+            {{- if .Values.postgres.extraEnv }}
+            {{- toYaml .Values.postgres.extraEnv | nindent 12 }}
+            {{- end }}
           ports:
             - name: postgres
               containerPort: 5432
@@ -87,14 +103,26 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.postgres.resources | nindent 12 }}
+          {{- if .Values.persistence.postgres.enabled }}
           volumeMounts:
-            {{- if .Values.persistence.postgres.enabled }}
             - name: postgres-data
-              mountPath: /var/lib/postgresql/data
-            {{- end }}
+              mountPath: /var/lib/postgresql
+          {{- end }}
+      {{- if .Values.persistence.postgres.enabled }}
       volumes:
-        {{- if .Values.persistence.postgres.enabled }}
         - name: postgres-data
           persistentVolumeClaim:
             claimName: {{ include "n8n.fullname" . }}-postgres
-        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

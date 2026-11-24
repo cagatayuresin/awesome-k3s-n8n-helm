@@ -1,17 +1,15 @@
-{{- if .Values.ingress.enabled -}}
+{{- if .Values.ingress.enabled }}
 {{- $fullName := include "n8n.fullname" . -}}
 {{- $svcPort := .Values.service.n8n.port -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ $fullName }}
-  namespace: {{ .Values.namespace }}
+  namespace: {{ include "n8n.namespace" . }}
   labels:
     {{- include "n8n.labels" . | nindent 4 }}
   annotations:
-    {{- if .Values.letsencrypt.createClusterIssuer }}
-    cert-manager.io/cluster-issuer: {{ .Values.letsencrypt.clusterIssuerName }}
-    {{- else if .Values.letsencrypt.clusterIssuerName }}
+    {{- if .Values.letsencrypt.clusterIssuerName }}
     cert-manager.io/cluster-issuer: {{ .Values.letsencrypt.clusterIssuerName }}
     {{- end }}
     {{- with .Values.ingress.annotations }}
@@ -52,8 +50,9 @@ spec:
                   number: {{ $svcPort }}
     {{- end }}
 {{- end }}
-
+{{- if and .Values.ingress.enabled .Values.letsencrypt.createClusterIssuer }}
 ---
+{{- end }}
 {{- if .Values.letsencrypt.createClusterIssuer }}
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -68,7 +67,7 @@ spec:
     privateKeySecretRef:
       name: {{ .Values.letsencrypt.clusterIssuerName }}-account-key
     solvers:
-    - http01:
-        ingress:
-          class: {{ .Values.ingress.className | default "traefik" }}
+      - http01:
+          ingress:
+            ingressClassName: {{ .Values.ingress.className | default "traefik" }}
 {{- end }}

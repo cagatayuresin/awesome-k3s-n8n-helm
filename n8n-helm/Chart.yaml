@@ -2,8 +2,9 @@ apiVersion: v2
 name: n8n
 description: A production-ready n8n Helm chart for K3s with Let's Encrypt SSL support
 type: application
-version: 1.0.0
-appVersion: "2.11.4"
+version: 2.0.0
+appVersion: "2.49.5"
+kubeVersion: ">=1.26.0-0"
 keywords:
   - n8n
   - workflow
@@ -12,9 +13,20 @@ keywords:
   - postgres
   - k3s
   - letsencrypt
+  - traefik
 home: https://github.com/cagatayuresin/awesome-k3s-n8n-helm
 sources:
   - https://github.com/cagatayuresin/awesome-k3s-n8n-helm
 maintainers:
   - name: Cagatay Uresin
     url: https://github.com/cagatayuresin
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/changes: |
+    - kind: changed
+      description: Update n8n to v2.49.5 and PostgreSQL to 18 (with PG18 /var/lib/postgresql mount layout)
+    - kind: fixed
+      description: Implement missing Namespace template for createNamespace and switch cert-manager solver to ingressClassName
+    - kind: added
+      description: Add values.schema.json, NOTES.txt, helm test hook, N8N_ENCRYPTION_KEY, N8N_PROXY_HOPS, and /healthz/readiness probe

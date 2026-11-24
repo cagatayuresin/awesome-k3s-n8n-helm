@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v4.3.2
+  KUBECONFORM_VERSION: v0.8.0
+  CHART_DIR: n8n-helm
+
+jobs:
+  lint:
+    name: YAML & Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Lint YAML files
+        run: |
+          pip install --quiet yamllint
+          yamllint -c .yamllint.yml .github/ "${CHART_DIR}/Chart.yaml" "${CHART_DIR}/values.yaml"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm lint (default values)
+        run: helm lint "${CHART_DIR}" --strict
+
+      - name: Helm lint (production custom values)
+        run: |
+          helm lint "${CHART_DIR}" --strict \
+            --set domain=n8n.example.com \
+            --set letsencrypt.email=ops@example.com \
+            --set postgres.password=super-secret-password \
+            --set n8n.encryptionKey=super-secret-encryption-key
+
+      - name: Helm lint (feature toggle matrix)
+        run: |
+          helm lint "${CHART_DIR}" --strict --set ingress.enabled=false --set letsencrypt.createClusterIssuer=false
+          helm lint "${CHART_DIR}" --strict --set persistence.n8n.enabled=false --set persistence.postgres.enabled=false
+          helm lint "${CHART_DIR}" --strict --set createNamespace=false --set enableWwwRedirect=false
+
+  validate-manifests:
+    name: Kubernetes Schema Validation
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - name: default
+            args: ""
+          - name: production
+            args: >-
+              --set domain=n8n.example.com
+              --set letsencrypt.email=ops@example.com
+              --set postgres.password=super-secret-password
+              --set n8n.encryptionKey=super-secret-encryption-key
+          - name: no-ingress-no-persistence
+            args: >-
+              --set ingress.enabled=false
+              --set letsencrypt.createClusterIssuer=false
+              --set persistence.n8n.enabled=false
+              --set persistence.postgres.enabled=false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install kubeconform
+        run: |
+          KUBECONFORM_URL="https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          curl -sSL "${KUBECONFORM_URL}" | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Render & validate Kubernetes schemas (${{ matrix.scenario.name }})
+        run: |
+          helm template ci-release "${CHART_DIR}" ${{ matrix.scenario.args }} \
+            | kubeconform \
+                -strict \
+                -summary \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+
+  security-scan:
+    name: Trivy Misconfiguration Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Render manifests
+        run: |
+          mkdir -p rendered
+          helm template ci-release "${CHART_DIR}" \
+            --set domain=n8n.example.com \
+            --set letsencrypt.email=ops@example.com \
+            --set postgres.password=super-secret-password \
+            --set n8n.encryptionKey=super-secret-encryption-key \
+            > rendered/manifests.yaml
+
+      - name: Trivy IaC report (MEDIUM, HIGH, CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: rendered/manifests.yaml
+          format: table
+          severity: MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Trivy IaC gate (fail on CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: rendered/manifests.yaml
+          format: table
+          severity: CRITICAL
+          exit-code: '1'
+
+  e2e-kind:
+    name: Kind E2E Install & Test
+    runs-on: ubuntu-latest
+    needs:
+      - validate-manifests
+      - security-scan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1.15.1
+        with:
+          cluster_name: n8n-e2e
+          wait: 120s
+
+      - name: Install chart on Kind
+        run: |
+          helm install n8n-e2e "${CHART_DIR}" \
+            --set domain=n8n.local \
+            --set ingress.enabled=false \
+            --set letsencrypt.createClusterIssuer=false \
+            --set persistence.storageClass=standard \
+            --set persistence.n8n.size=1Gi \
+            --set persistence.postgres.size=1Gi \
+            --set postgres.password=ci-e2e-password \
+            --set n8n.encryptionKey=ci-e2e-encryption-key \
+            --wait \
+            --timeout 5m
+
+      - name: Run Helm test
+        run: helm test n8n-e2e --logs --timeout 2m
+
+      - name: Verify idempotent Helm upgrade
+        run: |
+          helm upgrade n8n-e2e "${CHART_DIR}" \
+            --set domain=n8n.local \
+            --set ingress.enabled=false \
+            --set letsencrypt.createClusterIssuer=false \
+            --set persistence.storageClass=standard \
+            --set persistence.n8n.size=1Gi \
+            --set persistence.postgres.size=1Gi \
+            --set postgres.password=ci-e2e-password \
+            --set n8n.encryptionKey=ci-e2e-encryption-key \
+            --wait \
+            --timeout 5m
+
+      - name: Uninstall chart
+        run: helm uninstall n8n-e2e --wait
+
+      - name: Dump cluster diagnostics on failure
+        if: failure()
+        run: |
+          kubectl get all,pvc,events -n n8n || true
+          kubectl logs -n n8n -l app.kubernetes.io/component=postgres --all-containers --tail=100 || true
+          kubectl logs -n n8n -l app.kubernetes.io/component=n8n --all-containers --tail=100 || true
